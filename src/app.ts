@@ -1,5 +1,6 @@
 import Map from "@arcgis/core/Map";
 import MapView from "@arcgis/core/views/MapView";
+import SceneView from "@arcgis/core/views/SceneView";
 import FeatureLayer from "@arcgis/core/layers/FeatureLayer";
 import SceneLayer from "@arcgis/core/layers/SceneLayer";
 
@@ -23,6 +24,9 @@ import PopupTemplate from "@arcgis/core/PopupTemplate";
 import { when } from "@arcgis/core/core/reactiveUtils";
 import { Chart, registerables } from "chart.js";
 
+import Search from "@arcgis/core/widgets/Search";
+import Home from "@arcgis/core/widgets/Home";
+
 // Layers
 const streetsUrl =
   "https://services2.arcgis.com/cFEFS0EWrhfDeVw9/arcgis/rest/services/Berlin_Equal_Street_Names/FeatureServer";
@@ -33,6 +37,7 @@ const districtsUrl =
   "https://services2.arcgis.com/jUpNdisbWqRpMo35/arcgis/rest/services/BerlinRBS_Ortsteile_2017/FeatureServer";
 
 // TODO: Add berlin trees layer from Living Atlas
+const treesUrl = "https://services2.arcgis.com/jUpNdisbWqRpMo35/arcgis/rest/services/Baumkataster_Berlin/FeatureServer/0";
 
 /********************************************************************
  * Step 1 - Add map with basemap *
@@ -41,16 +46,34 @@ const map = new Map({
   // TODO: find a basemap of your choice
   basemap: "topo-vector",
   // TODO: add elevation
+  ground: "world-elevation"
 });
 
-const view = new MapView({
+
+
+/* const view = new MapView({
   container: document.querySelector("#viewDiv") as HTMLDivElement,
-  zoom: 4,
-  center: [15, 65], // TODO: add longitude, latitude of Berlin here,
+  zoom: 12,
+  center: [13.41053, 52.52437], // TODO: add longitude, latitude of Berlin here,
   map: map,
-});
+}); */
 
 // TODO: transform MapView to SceneView
+
+const view = new SceneView({
+  container: document.querySelector("#viewDiv") as HTMLDivElement,
+  zoom: 12,
+  center: [13.41053, 52.52437], // TODO: add longitude, latitude of Berlin here,
+  map: map,
+  scale: 24000,
+  environment: {
+    atmosphereEnabled: false,
+    starsEnabled: false
+  }
+  /* camera: {
+      heading: 0
+  } */
+});
 
 /**************************************************
  * Step 2 - Add a trees layer with a web style symbol *
@@ -60,18 +83,23 @@ const treesRenderer = new SimpleRenderer({
   symbol: new WebStyleSymbol({
     // name: "", // TODO: find a web style symbol for a realisitic tree
     // styleName: "",
-  }),
+    /* name: "Populus",
+    styleName: "EsriRealisticTreesStyle", */    
+   
+    styleName: "esriRealisticTreesStyle",
+    name: "Acer"
+  })
 });
 
 const treesLayer = new FeatureLayer({
   title: "Berlin trees",
   // TODO: make the layer more performant by adding minScale,
-  // url: treesUrl,
+  url: treesUrl,
   outFields: ["*"],
   elevationInfo: {
     mode: "on-the-ground",
   },
-  renderer: treesRenderer,
+  renderer: treesRenderer
 });
 
 map.add(treesLayer);
@@ -79,8 +107,8 @@ map.add(treesLayer);
 /**************************************************
  * Step 3 - Change the streets renderer to show a 3D line *
  **************************************************/
-const FEMALE_COLOR = ""; // TODO: choose a color
-const MALE_COLOR = ""; // TODO: choose a color
+const FEMALE_COLOR = "#c81dff"; // TODO: choose a color
+const MALE_COLOR = "#dce31b"; // TODO: choose a color
 
 const femaleStreetSymbol = {
   value: "F",
@@ -121,15 +149,15 @@ const streetsLayer = new FeatureLayer({
   elevationInfo: {
     mode: "on-the-ground",
   },
-  // renderer: new UniqueValueRenderer({
-  //   field: "gender",
-  //   // TODO: add the symbols to the renderer
-  //   uniqueValueInfos: [],
-  // }),
+   renderer: new UniqueValueRenderer({
+     field: "gender",
+     // TODO: add the symbols to the renderer
+     uniqueValueInfos: [maleStreetSymbol, femaleStreetSymbol]    
+   }),
 });
 
 // TODO: add layers to the map
-
+map.add(streetsLayer);
 /**************************************************
  * Step 4 - Add districts and 3D labels *
  **************************************************/
@@ -146,12 +174,12 @@ const districtsLayer = new FeatureLayer({
       symbolLayers: [
         new FillSymbol3DLayer({
           outline: {
-            color: "white",
-            size: "2px",
-            /* TODO: find a line pattern
-            pattern: new LineStylePattern3D({
-              style: "", 
-            }),*/
+            color: "red",
+            size: "1px",
+            //TODO: find a line pattern
+            pattern: {  // autocasts as new LineStylePattern3D()           
+              style: "dash"
+            },           
             patternCap: "round",
           },
         }),
@@ -214,7 +242,8 @@ const districtsLabelLayer = new FeatureLayer({
 });
 
 // TODO: add layers to the map
-
+map.add(districtsLayer);
+map.add(districtsLabelLayer)
 /**************************************************
  * Step 5 - Add 3D buildings with edges rendering *
  **************************************************/
@@ -223,12 +252,12 @@ const buildingSymbol = new MeshSymbol3D({
   symbolLayers: [
     new FillSymbol3DLayer({
       material: {
-        color: [40, 40, 40, 0.5],
+        color: [40, 40, 40, 0.6],
         colorMixMode: "tint",
       },
       edges: new SolidEdges3D({
         size: 0.5,
-        color: [255, 255, 255, 0.5],
+        color: [255, 255, 255, 0.8],
       }),
     }),
   ],
@@ -240,6 +269,7 @@ const buildingsLayer = new SceneLayer({
   outFields: ["*"],
   renderer: new SimpleRenderer({
     // TODO: add the symbol to the renderer
+    symbol: buildingSymbol
   }),
   legendEnabled: false,
 });
@@ -252,7 +282,7 @@ map.add(buildingsLayer);
 
 const arcadeExpressionInfos = [
   {
-    name: "title",
+    name: "name",
     title: "Name of the person the street is named after.",
     expression: "fromJSON($feature.details).labels.en.value",
   },
@@ -269,8 +299,24 @@ const arcadeExpressionInfos = [
 ];
 
 streetsLayer.popupTemplate = new PopupTemplate({
-  content: "", // TODO: add content to popup template
+  content: [ 
+    {
+      type: "fields",
+      fieldInfos: [        
+        {
+          fieldName: "expression/name",       
+        },
+        {
+          fieldName: "expression/description",       
+        },
+        {
+          fieldName: "expression/link",       
+        }
+      ]
+    }
+  ], // TODO: add content to popup template
   // expressionInfos: {} / TODO: add arcarde expressions to popup template
+  expressionInfos: arcadeExpressionInfos
 });
 
 /**************************************************
@@ -279,7 +325,19 @@ streetsLayer.popupTemplate = new PopupTemplate({
 
 // TODO: add the search widget
 
+const searchWidget = new Search({
+  view: view,
+  container: document.querySelector("#search-widget-container") as HTMLDivElement
+});
+
 // TODO: add home widget
+
+let homeWidget = new Home({
+  view: view
+});
+
+// adds the home widget to the top left corner of the MapView
+view.ui.add(homeWidget, "top-left");
 
 // TODO: add layer list with legend
 // const layerList = new LayerList({
@@ -331,6 +389,24 @@ view.whenLayerView(streetsLayer).then((layerView) => {
     () => !layerView.updating,
     async () => {
       // TODO: query the features & update the chart with the correct numbers
+      const results = await layerView.queryFeatures({
+        geometry: view.extent,
+        returnGeometry: true
+      })
+
+      const graphics = results.features      
+
+      femaleStreetsCounts = graphics.filter(
+        (street) => street.attributes.gender === 'F'  
+      ).length
+      maleStreetsCount = graphics.filter(
+        (street) => street.attributes.gender === 'M'
+      ).length          
+
+      //update chart
+      chart.data.datasets[0].data = [femaleStreetsCounts, maleStreetsCount];
+      chart.update()
+
     }
   );
 });
